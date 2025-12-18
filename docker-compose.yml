@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  nextjs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: your-lawyer-front
+    restart: unless-stopped
+    ports:
+      - "3000:6000"  # Host:Container - Dockerfile exposes 6000
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      - API_URL=${API_URL:-${NEXT_PUBLIC_API_URL:-http://localhost:8000}}
+      - JWT_SERVER_SECRET=${JWT_SERVER_SECRET}
+    env_file:
+      - .env.production
+    networks:
+      - app-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  app-network:
+    driver: bridge
+

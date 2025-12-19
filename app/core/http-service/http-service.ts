@@ -17,12 +17,21 @@ const log = (level: 'info' | 'error' | 'warn', message: string, data?: unknown) 
     console.log(`[${timestamp}] [${level.toUpperCase()}] ${message}`, logData || '');
 };
 
+// Log API_URL configuration at module load
+log('info', '[HTTP-SERVICE] Initializing HTTP service', {
+    API_URL: API_URL,
+    hasAPI_URL: !!API_URL,
+    type: typeof API_URL,
+});
+
 const httpService = axios.create({
     baseURL: API_URL,
     timeout: 30000, // 30 seconds timeout
     headers: {
         "Content-Type": "application/json",
     },
+    // Add these for better debugging
+    validateStatus: (status) => status < 500, // Don't throw on 4xx errors
 });
 
 // Request interceptor for logging
@@ -70,14 +79,25 @@ httpService.interceptors.response.use(
                 errorHandler[statusCode](errorData);
             }
         } else if (error?.request) {
-            log('error', '[HTTP NETWORK ERROR]', {
+            // Check if it's a timeout
+            const isTimeout = error.code === 'ECONNABORTED' || error.message?.includes('timeout');
+            log('error', isTimeout ? '[HTTP TIMEOUT ERROR]' : '[HTTP NETWORK ERROR]', {
                 message: error.message,
                 code: error.code,
+                isTimeout: isTimeout,
+                requestMade: !!error.request,
+                requestData: error.request ? {
+                    responseURL: error.request.responseURL,
+                    status: error.request.status,
+                    statusText: error.request.statusText,
+                } : null,
                 config: {
                     url: error.config?.url,
                     method: error.config?.method,
                     baseURL: error.config?.baseURL,
+                    fullURL: error.config?.baseURL ? `${error.config.baseURL}${error.config.url}` : error.config?.url,
                     timeout: error.config?.timeout,
+                    headers: error.config?.headers,
                 },
             });
             networkErrorStrategy();
@@ -118,15 +138,38 @@ async function apiBase<T>(
         return response.data as T;
     } catch (error: unknown) {
         const duration = Date.now() - startTime;
-        const axiosError = error as { message?: string; code?: string; response?: { data?: unknown; status?: number } };
-        log('error', `[API_BASE] Request failed after ${duration}ms`, {
+        const axiosError = error as { 
+            message?: string; 
+            code?: string; 
+            response?: { data?: unknown; status?: number; headers?: unknown }; 
+            request?: unknown;
+            config?: { baseURL?: string; url?: string; timeout?: number };
+        };
+        
+        const isTimeout = axiosError?.code === 'ECONNABORTED' || 
+                         axiosError?.message?.includes('timeout') ||
+                         duration >= 29000; // Close to 30s timeout
+        
+        log('error', isTimeout ? `[API_BASE] Request TIMEOUT after ${duration}ms` : `[API_BASE] Request failed after ${duration}ms`, {
             url,
+            fullURL: axiosError?.config?.baseURL ? `${axiosError.config.baseURL}${url}` : url,
             duration: `${duration}ms`,
+            isTimeout: isTimeout,
             error: {
                 message: axiosError?.message,
                 code: axiosError?.code,
-                response: axiosError?.response?.data,
-                status: axiosError?.response?.status,
+                hasResponse: !!axiosError?.response,
+                hasRequest: !!axiosError?.request,
+                response: axiosError?.response ? {
+                    data: axiosError.response.data,
+                    status: axiosError.response.status,
+                    headers: axiosError.response.headers,
+                } : null,
+                config: axiosError?.config ? {
+                    baseURL: axiosError.config.baseURL,
+                    url: axiosError.config.url,
+                    timeout: axiosError.config.timeout,
+                } : null,
             },
         });
         throw error;

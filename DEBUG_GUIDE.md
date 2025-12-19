@@ -174,14 +174,18 @@ docker network inspect your-lawyer-front-next_app-network
 
 **علت احتمالی:**
 - Backend در دسترس نیست
-- URL اشتباه است
+- URL اشتباه است (استفاده از localhost در Docker)
 - مشکل در network Docker
+- مشکل در firewall
 
 **راه حل:**
 1. بررسی لاگ‌های backend
 2. تست اتصال از داخل container
 3. بررسی network Docker
 4. بررسی environment variables
+5. **مهم:** مطمئن شوید از `localhost` استفاده نمی‌کنید - از service name یا IP استفاده کنید
+
+**برای راهنمای کامل رفع مشکل timeout، فایل `TIMEOUT_FIX_GUIDE.md` را مطالعه کنید.**
 
 ### مشکل: Environment variables تنظیم نشده
 

@@ -52,18 +52,47 @@ export async function sendVerificationCodeAction(model: MobileRequestModel) {
         return { success: true, message: response.message };
     } catch (err: unknown) {
         const totalDuration = Date.now() - startTime;
-        const axiosError = err as { message?: string; code?: string; response?: { data?: unknown; status?: number }; stack?: string };
-        log('error', 'sendVerificationCodeAction failed', {
+        const axiosError = err as { 
+            message?: string; 
+            code?: string; 
+            response?: { data?: unknown; status?: number }; 
+            request?: unknown;
+            config?: { baseURL?: string; url?: string };
+            stack?: string;
+        };
+        
+        const isTimeout = axiosError?.code === 'ECONNABORTED' || 
+                         axiosError?.message?.includes('timeout') ||
+                         totalDuration >= 29000;
+        
+        log('error', isTimeout ? 'sendVerificationCodeAction TIMEOUT' : 'sendVerificationCodeAction failed', {
             totalDuration: `${totalDuration}ms`,
+            isTimeout: isTimeout,
             error: {
                 message: axiosError?.message,
                 code: axiosError?.code,
-                response: axiosError?.response?.data,
-                status: axiosError?.response?.status,
+                hasResponse: !!axiosError?.response,
+                hasRequest: !!axiosError?.request,
+                response: axiosError?.response ? {
+                    data: axiosError.response.data,
+                    status: axiosError.response.status,
+                } : null,
+                requestURL: axiosError?.config ? `${axiosError.config.baseURL || ''}${axiosError.config.url || ''}` : null,
                 stack: axiosError?.stack,
             },
         });
-        return { success: false, error: 'خطا در ارسال کد تأیید' };
+        
+        // Provide more specific error message
+        let errorMessage = 'خطا در ارسال کد تأیید';
+        if (isTimeout) {
+            errorMessage = 'زمان درخواست به پایان رسید. لطفاً اتصال اینترنت و آدرس سرور را بررسی کنید.';
+        } else if (axiosError?.code === 'ECONNREFUSED') {
+            errorMessage = 'اتصال به سرور برقرار نشد. لطفاً آدرس سرور را بررسی کنید.';
+        } else if (axiosError?.response?.status === 404) {
+            errorMessage = 'آدرس درخواست یافت نشد.';
+        }
+        
+        return { success: false, error: errorMessage };
     }
 }
 

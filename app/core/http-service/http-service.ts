@@ -9,6 +9,7 @@ import axios, {
     AxiosResponse,
 } from "axios";
 import { errorHandler, networkErrorStrategy } from "./http-error-strategies";
+import { getSession } from "@/app/utils/session";
 
 // Helper function for structured logging
 const log = (level: 'info' | 'error' | 'warn', message: string, data?: unknown) => {
@@ -26,10 +27,14 @@ log('info', '[HTTP-SERVICE] Initializing HTTP service', {
 
 const httpService = axios.create({
     baseURL: API_URL,
-    timeout: 30000, // 30 seconds timeout
+    timeout: 180000, // 180 seconds timeout
     headers: {
         "Content-Type": "application/json",
+        "Accept": "application/json",
     },
+    // Ensure proper encoding for UTF-8
+    responseType: 'json',
+    responseEncoding: 'utf8',
     // Add these for better debugging
     validateStatus: (status) => status < 500, // Don't throw on 4xx errors
 });
@@ -58,10 +63,22 @@ httpService.interceptors.request.use(
 
 httpService.interceptors.response.use(
     (response) => {
+        // Ensure proper UTF-8 encoding for response
+        if (response.data && typeof response.data === 'string') {
+            try {
+                // If response is a string, ensure it's properly decoded
+                response.data = JSON.parse(response.data);
+            } catch (e) {
+                // If it's not JSON, keep it as string but ensure UTF-8
+                // The string should already be UTF-8 if axios is configured correctly
+            }
+        }
+        
         log('info', `[HTTP RESPONSE] ${response.config.method?.toUpperCase()} ${response.config.url}`, {
             status: response.status,
             statusText: response.statusText,
-            data: response.data,
+            contentType: response.headers['content-type'],
+            hasData: !!response.data,
         });
         return response;
     },
@@ -227,4 +244,69 @@ async function deleteData(
     return await apiBase(url, options);
 }
 
-export { createData, readData, updateData, deleteData };
+/**
+ * Helper function to get auth headers from session
+ * This function reads the session from cookies and adds Authorization header
+ */
+async function getAuthHeaders(): Promise<AxiosRequestHeaders> {
+    const session = await getSession();
+    const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    };
+    
+    if (session?.accesstoken) {
+        headers["Authorization"] = `Bearer ${session.accesstoken}`;
+    }
+    
+    return headers as AxiosRequestHeaders;
+}
+
+/**
+ * Read data with automatic authentication from session
+ */
+async function readDataWithAuth<T>(url: string): Promise<T> {
+    const headers = await getAuthHeaders();
+    return await readData<T>(url, headers);
+}
+
+/**
+ * Create data with automatic authentication from session
+ */
+async function createDataWithAuth<TModel, TResult>(
+    url: string,
+    data: TModel
+): Promise<TResult> {
+    const headers = await getAuthHeaders();
+    return await createData<TModel, TResult>(url, data, headers);
+}
+
+/**
+ * Update data with automatic authentication from session
+ */
+async function updateDataWithAuth<TModel, TResult>(
+    url: string,
+    data: TModel
+): Promise<TResult> {
+    const headers = await getAuthHeaders();
+    return await updateData<TModel, TResult>(url, data, headers);
+}
+
+/**
+ * Delete data with automatic authentication from session
+ */
+async function deleteDataWithAuth(url: string): Promise<void> {
+    const headers = await getAuthHeaders();
+    return await deleteData(url, headers);
+}
+
+export { 
+    createData, 
+    readData, 
+    updateData, 
+    deleteData,
+    createDataWithAuth,
+    readDataWithAuth,
+    updateDataWithAuth,
+    deleteDataWithAuth,
+};

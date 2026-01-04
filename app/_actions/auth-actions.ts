@@ -298,7 +298,7 @@ export async function SetAuthCookieAction(user: UserResponse) {
         log('info', 'Setting cookie...');
         cookieStore.set('ylawyer-session', encryptedSession, {
             httpOnly: true,
-            secure: true,
+            secure: false,
             sameSite: 'strict',
             path: '/'
         });

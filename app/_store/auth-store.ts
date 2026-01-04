@@ -13,16 +13,25 @@ interface SessionState {
 }
 const fetchSessionFromAPI = async () => {
     try {
-        const response = await fetch('/api/auth/session');
+        const response = await fetch('/api/auth/session', {
+            credentials: 'include', // Ensure cookies are sent
+        });
+        
         if (!response.ok) {
-            return  {session:null, status:'unauthenticated' as AuthStatus}
+            console.log('[AUTH-STORE] Session API returned non-ok status:', response.status, response.statusText);
+            return {session:null, status:'unauthenticated' as AuthStatus}
         }
-        else{
-            const data = await response.json();
-            return data? {session: data, status: 'authenticated' as AuthStatus} :
-                        {session:null, status:'unauthenticated' as AuthStatus}
-        } 
-    } catch  {
+        
+        const data = await response.json();
+        if (data && Object.keys(data).length > 0) {
+            console.log('[AUTH-STORE] Session retrieved successfully');
+            return {session: data, status: 'authenticated' as AuthStatus};
+        } else {
+            console.log('[AUTH-STORE] Session data is empty');
+            return {session:null, status:'unauthenticated' as AuthStatus}
+        }
+    } catch (error) {
+        console.error('[AUTH-STORE] Error fetching session:', error);
         return {session:null, status:'unauthenticated' as AuthStatus}
     }
 }

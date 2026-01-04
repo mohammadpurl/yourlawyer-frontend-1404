@@ -300,9 +300,9 @@ export const useConversationStore = create<ConversationState>()(
                 ...value.state,
                 conversations: value.state.conversations.map((conv: Conversation) => ({
                   ...conv,
-                  createdAt: conv.createdAt.toISOString(),
-                  updatedAt: conv.updatedAt.toISOString(),
-                  messages: conv.messages.map((msg: ChatMessage) => ({
+                  createdAt: conv.createdAt?.toISOString(),
+                  updatedAt: conv.updatedAt?.toISOString(),
+                  messages: conv.messages?.map((msg: ChatMessage) => ({
                     ...msg,
                     timestamp: msg.timestamp.toISOString(),
                   })),

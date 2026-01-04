@@ -2,21 +2,38 @@ import { decryptSession } from "@/app/utils/session";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-export async function GET(request: Request) {
-    const cookieStore = await cookies();
-    const session = cookieStore.get('ylawyer-session')?.value;
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
-    if (!session) {
-        return new Response('Unauthorized', { status: 401 });
-    }   
-    const decryptedSession = await decryptSession(session);
-    if (!decryptedSession) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+export async function GET() {
+    try {
+        const cookieStore = await cookies();
+        const session = cookieStore.get('ylawyer-session')?.value;
+
+        if (!session) {
+            console.log('[SESSION API] No session cookie found');
+            return new Response('Unauthorized', { status: 401 });
+        }   
+        
+        try {
+            const decryptedSession = await decryptSession(session);
+            if (!decryptedSession) {
+                console.log('[SESSION API] Failed to decrypt session');
+                return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+            }
+            return new Response(JSON.stringify(decryptedSession), { status: 200 });
+        } catch (decryptError) {
+            console.error('[SESSION API] Error decrypting session:', decryptError);
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+    } catch (error) {
+        console.error('[SESSION API] Unexpected error:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
-    return new Response(JSON.stringify(decryptedSession), { status: 200 });
 }
 
-export async function POST(request: Request) {
+export async function POST() {
     const cookieStore = await cookies();
     const session = cookieStore.get('ylawyer-session')?.value;
     if (!session) {

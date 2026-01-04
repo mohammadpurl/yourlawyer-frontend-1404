@@ -113,8 +113,11 @@ const Dashboard = () => {
       currentConversationId = tempId;
     }
 
+    // Generate unique ID using timestamp + random string
+    const generateMessageId = () => `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
     const newQuestion: ChatMessage = {
-      id: Date.now().toString(),
+      id: generateMessageId(),
       type: "question",
       content,
       timestamp: new Date(),
@@ -139,7 +142,7 @@ const Dashboard = () => {
     try { 
       const response = await askUserQuestion(content, currentConversationId);
       const answer: ChatMessage = {
-        id: (Date.now() + 1).toString(),
+        id: generateMessageId(),
         type: "answer",
         content: response.answer,
         timestamp: new Date(),
@@ -233,9 +236,9 @@ const Dashboard = () => {
                       گفتگویی وجود ندارد
                     </p>
                   ) : (
-                    conversations.map((conv) => (
+                    conversations.map((conv, index) => (
                       <div
-                        key={conv.id}
+                        key={`${conv.id}-${index}`}
                         onClick={() => handleSelectConversation(conv.id)}
                         className={`p-3 rounded-lg cursor-pointer transition-colors group ${
                           activeConversationId === conv.id
@@ -303,9 +306,9 @@ const Dashboard = () => {
                       <p className="text-sm mt-2">اولین سوال خود را بپرسید</p>
                     </div>
                   ) : (
-                    activeMessages.map((msg) => (
+                    activeMessages.map((msg, index) => (
                       <div
-                        key={msg.id}
+                        key={`${msg.id}-${index}`}
                         className={`p-4 rounded-lg ${
                           msg.type === "question"
                             ? "bg-primary text-primary-foreground mr-auto max-w-[80%]"

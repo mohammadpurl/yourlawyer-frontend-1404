@@ -5,8 +5,16 @@ import { Skeleton } from "./ui/skeleton"
 import { useTransition } from "react"
 import { signOutAction } from "@/app/_actions/auth-actions"
 import { useRouter } from "next/navigation"
-import { Loader2, LogOutIcon, Scale } from "lucide-react"
+import { Loader2, LogOutIcon, Scale, UserRound, UserRoundCog } from "lucide-react"
 import { Button } from "./ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "./ui/dropdown-menu"
 
 export const TopNavigationAccount = () => {
     const status = useSessionStore(state => state.status)
@@ -48,19 +56,57 @@ export const TopNavigationAccount = () => {
           </div>
           )}
           {status === 'authenticated' && (
-            <div className="flex items-center gap-2">
-                <Image src={session?.pic || ''} className="rounded-full" alt="profile picture" width={48} height={48} />
-                <p>
-                    {session?.userName}
-                </p>
-                <div onClick={handleSignOut} className="text-muted-foreground hover:text-primary cursor-pointer">
-                    {
-                        isPending ? <Loader2 className="w-4 h-4 animate-spin" />
-                        : <><LogOutIcon className="w-4 h-4" />خروج</>
-                    }
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="h-11 w-11 rounded-full border border-border overflow-hidden shadow-sm hover:shadow-md transition"
+                  aria-label="Account menu"
+                >
+                  {session?.pic ? (
+                    <Image
+                      src={session.pic}
+                      className="h-full w-full object-cover"
+                      alt="profile picture"
+                      width={44}
+                      height={44}
+                    />
+                  ) : (
+                    <div className="h-full w-full bg-muted flex items-center justify-center text-sm font-semibold text-muted-foreground">
+                      {(session?.userName || "؟").slice(0, 2)}
                     </div>
-                </div>
-            )}
+                  )}
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel className="space-y-1">
+                  <div className="flex items-center gap-2 text-sm font-semibold">
+                    <UserRound className="h-4 w-4 text-muted-foreground" />
+                    <span>{session?.userName || "کاربر"}</span>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/profile" className="flex items-center gap-2">
+                    <UserRoundCog className="h-4 w-4" />
+                    <span>تکمیل پروفایل</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={handleSignOut}
+                  className="text-destructive focus:text-destructive flex items-center gap-2"
+                  disabled={isPending}
+                >
+                  {isPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <LogOutIcon className="w-4 h-4" />
+                  )}
+                  <span>خروج</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </header>
     

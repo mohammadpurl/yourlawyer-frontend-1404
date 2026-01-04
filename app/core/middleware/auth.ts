@@ -49,7 +49,7 @@ export async function authMiddleware(request: NextRequest) {
             const cookieStore = await cookies();
             cookieStore.delete('ylawyer-session');
 
-            signinRoute.pathname = '/login';
+            signinRoute.pathname = '/auth/login';
             return NextResponse.redirect(signinRoute);
         }
 

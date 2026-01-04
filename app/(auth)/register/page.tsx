@@ -4,32 +4,153 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app
 import { Input } from "@/app/components/ui/input";
 import { Label } from "@/app/components/ui/label";
 import { Scale } from "lucide-react";
-
-import { useState } from "react";
-import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
+import { useState, useTransition } from "react";
+import { useToast } from "@/hooks/use-toast";
+import { sendVerificationCodeAction, verifyCodeAction, resendOtpAction } from "@/app/_actions/auth-actions";
+import { useSessionStore } from "@/app/_store/auth-store";
+import { useConversationStore } from "@/app/_store/conversation-store";
+import { useRouter } from "next/navigation";
 
 const RegisterPage = () => {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [step, setStep] = useState<'mobile' | 'code'>('mobile');
+  const [mobile, setMobile] = useState("");
+  const [code, setCode] = useState("");
   const { toast } = useToast();
+  const [isPending, startTransition] = useTransition();
+  const router = useRouter();
+  const updateSession = useSessionStore(state => state.updateSession);
+  const loadConversationsFromAPI = useConversationStore(state => state.loadConversationsFromAPI);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleMobileSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (password !== confirmPassword) {
-      toast({
-        title: "خطا",
-        description: "رمز عبور و تکرار آن یکسان نیستند",
-        variant: "destructive",
-      });
-      return;
-    }
-    // این قسمت به بک‌اند متصل می‌شود
-    toast({
-      title: "ثبت‌نام موفقیت‌آمیز",
-      description: "حساب کاربری شما ایجاد شد",
+    const startTime = Date.now();
+    console.log('[CLIENT] [REGISTER] handleMobileSubmit started', {
+      mobile,
+      timestamp: new Date().toISOString(),
+    });
+    
+    startTransition(async () => {
+      try {
+        console.log('[CLIENT] [REGISTER] Calling sendVerificationCodeAction...');
+        const requestStartTime = Date.now();
+        const result = await sendVerificationCodeAction({ mobile });
+        const requestDuration = Date.now() - requestStartTime;
+        
+        console.log('[CLIENT] [REGISTER] sendVerificationCodeAction completed', {
+          success: result.success,
+          duration: `${requestDuration}ms`,
+          error: result.error,
+        });
+        
+        if (result.success) {
+          const totalDuration = Date.now() - startTime;
+          console.log('[CLIENT] [REGISTER] Mobile submission successful', {
+            totalDuration: `${totalDuration}ms`,
+          });
+          setStep('code');
+          toast({
+            title: "کد تأیید ارسال شد",
+            description: "لطفاً کد ارسال شده را وارد کنید",
+          });
+        } else {
+          console.error('[CLIENT] [REGISTER] Mobile submission failed', {
+            error: result.error,
+          });
+          toast({
+            title: "خطا",
+            description: result.error || "خطا در ارسال کد تأیید",
+            variant: "destructive",
+          });
+        }
+      } catch (error: any) {
+        const totalDuration = Date.now() - startTime;
+        console.error('[CLIENT] [REGISTER] Mobile submission error', {
+          error: error?.message,
+          stack: error?.stack,
+          totalDuration: `${totalDuration}ms`,
+        });
+        toast({
+          title: "خطا",
+          description: error?.message || "خطا در ارسال کد تأیید",
+          variant: "destructive",
+        });
+      }
+    });
+  };
+
+  const handleCodeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const startTime = Date.now();
+    console.log('[CLIENT] [REGISTER] handleCodeSubmit started', {
+      mobile,
+      codeLength: code.length,
+      timestamp: new Date().toISOString(),
+    });
+    
+    startTransition(async () => {
+      try {
+        console.log('[CLIENT] [REGISTER] Calling verifyCodeAction...');
+        const verifyStartTime = Date.now();
+        const result = await verifyCodeAction({ mobile, code });
+        const verifyDuration = Date.now() - verifyStartTime;
+        
+        console.log('[CLIENT] [REGISTER] verifyCodeAction completed', {
+          success: result.success,
+          duration: `${verifyDuration}ms`,
+          error: result.error,
+        });
+        
+        if (result.success) {
+          console.log('[CLIENT] [REGISTER] Updating session...');
+          const sessionStartTime = Date.now();
+          await updateSession();
+          const sessionDuration = Date.now() - sessionStartTime;
+          console.log('[CLIENT] [REGISTER] Session updated', {
+            duration: `${sessionDuration}ms`,
+          });
+          
+          console.log('[CLIENT] [REGISTER] Loading conversations...');
+          const conversationsStartTime = Date.now();
+          await loadConversationsFromAPI();
+          const conversationsDuration = Date.now() - conversationsStartTime;
+          console.log('[CLIENT] [REGISTER] Conversations loaded', {
+            duration: `${conversationsDuration}ms`,
+          });
+          
+          const totalDuration = Date.now() - startTime;
+          console.log('[CLIENT] [REGISTER] Code verification successful, redirecting...', {
+            totalDuration: `${totalDuration}ms`,
+          });
+          
+          router.push('/dashboard');
+          toast({
+            title: "ثبت‌نام موفقیت‌آمیز",
+            description: "در حال انتقال به داشبورد...",
+          });
+        } else {
+          console.error('[CLIENT] [REGISTER] Code verification failed', {
+            error: result.error,
+          });
+          toast({
+            title: "خطا",
+            description: result.error || "کد تأیید نامعتبر است",
+            variant: "destructive",
+          });
+        }
+      } catch (error: any) {
+        const totalDuration = Date.now() - startTime;
+        console.error('[CLIENT] [REGISTER] Code submission error', {
+          error: error?.message,
+          stack: error?.stack,
+          totalDuration: `${totalDuration}ms`,
+        });
+        toast({
+          title: "خطا",
+          description: error?.message || "کد تأیید نامعتبر است",
+          variant: "destructive",
+        });
+      }
     });
   };
 
@@ -42,63 +163,89 @@ const RegisterPage = () => {
           </div>
           <CardTitle className="text-2xl">ثبت‌نام در وکیل تو</CardTitle>
           <CardDescription>
-            برای شروع مشاوره حقوقی ثبت‌نام کنید
+            {step === 'mobile' 
+              ? 'برای شروع مشاوره حقوقی شماره موبایل خود را وارد کنید'
+              : 'کد تأیید ارسال شده را وارد کنید'}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">نام و نام خانوادگی</Label>
-              <Input
-                id="name"
-                type="text"
-                placeholder="نام کامل خود را وارد کنید"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                className="text-right"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">ایمیل</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="example@email.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="text-right"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">رمز عبور</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="رمز عبور را وارد کنید"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="text-right"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">تکرار رمز عبور</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                placeholder="رمز عبور را مجدد وارد کنید"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                className="text-right"
-              />
-            </div>
-            <Button type="submit" className="w-full bg-gradient-primary">
-              ثبت‌نام
-            </Button>
-          </form>
+          {step === 'mobile' ? (
+            <form onSubmit={handleMobileSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="mobile">شماره موبایل</Label>
+                <Input
+                  id="mobile"
+                  type="tel"
+                  placeholder="09123456789"
+                  value={mobile}
+                  onChange={(e) => setMobile(e.target.value)}
+                  required
+                  maxLength={11}
+                  className="text-right"
+                />
+              </div>
+              <Button type="submit" className="w-full bg-gradient-primary" disabled={isPending}>
+                {isPending ? 'در حال ارسال...' : 'ارسال کد تأیید'}
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={handleCodeSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="code">کد تأیید</Label>
+                <Input
+                  id="code"
+                  type="text"
+                  placeholder="123456"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  required
+                  maxLength={6}
+                  className="text-center text-2xl tracking-widest"
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  className="flex-1"
+                  onClick={() => {
+                    setStep('mobile');
+                    setCode('');
+                  }}
+                  disabled={isPending}
+                >
+                  تغییر شماره موبایل
+                </Button>
+                <Button type="submit" className="flex-1 bg-gradient-primary" disabled={isPending}>
+                  {isPending ? 'در حال بررسی...' : 'تأیید کد'}
+                </Button>
+              </div>
+              <button
+                type="button"
+                className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground underline"
+                disabled={isPending}
+                onClick={() => {
+                  startTransition(async () => {
+                    const result = await resendOtpAction({ mobile });
+                    if (result.success) {
+                      toast({
+                        title: "کد مجدد ارسال شد",
+                        description: "لطفاً کد جدید را وارد کنید",
+                      });
+                    } else {
+                      toast({
+                        title: "خطا",
+                        description: result.error || "خطا در ارسال مجدد کد",
+                        variant: "destructive",
+                      });
+                    }
+                  });
+                }}
+              >
+                ارسال مجدد کد
+              </button>
+            </form>
+          )}
           <div className="mt-6 text-center text-sm">
             <span className="text-muted-foreground">قبلاً ثبت‌نام کرده‌اید؟ </span>
             <Link href="/login" className="text-primary hover:underline font-medium">

@@ -1,5 +1,6 @@
 import { InferOutput } from 'valibot';
 import { SignInSchema, MobileRequestSchema, VerifyCodeSchema } from './auth.schema';
+import type { UserPlan } from '@/app/_types/plan.types';
 
 
 export type SignInModel = InferOutput<typeof SignInSchema>;
@@ -10,6 +11,7 @@ export interface UserResponse  {
     accessToken: string;
     sessionId: string;
     sessionExpiry: number;
+    plan?: UserPlan; // اطلاعات پلن کاربر
 }
 
 export interface JWT {
@@ -17,12 +19,14 @@ export interface JWT {
     fullName: string;
     pic: string;
     exp: number;
+    plan?: UserPlan; // اطلاعات پلن در JWT
 }
 
 export interface UserSession extends JWT {
     accesstoken: string;
     sessionId: string;    
     sessionExpiry: number;
+    plan?: UserPlan; // اطلاعات پلن کاربر
 }
 
 export interface RegisterModel {

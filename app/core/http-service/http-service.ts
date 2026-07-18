@@ -145,6 +145,29 @@ async function apiBase<T>(
         
         const response: AxiosResponse = await httpService(url, options);
         const duration = Date.now() - startTime;
+
+        if (response.status >= 400) {
+            const errorBody = response.data as ApiError | undefined;
+            const message =
+                errorBody?.message ||
+                (typeof errorBody === 'object' && errorBody !== null && 'detail' in errorBody
+                    ? String((errorBody as { detail: unknown }).detail)
+                    : undefined) ||
+                `Request failed with status ${response.status}`;
+
+            log('error', `[API_BASE] Request failed with status ${response.status}`, {
+                url,
+                duration: `${duration}ms`,
+                status: response.status,
+                data: response.data,
+            });
+
+            const error = new Error(message) as Error & {
+                response?: { data?: unknown; status?: number };
+            };
+            error.response = { data: response.data, status: response.status };
+            throw error;
+        }
         
         log('info', `[API_BASE] Request completed successfully in ${duration}ms`, {
             url,

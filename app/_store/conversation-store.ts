@@ -37,6 +37,24 @@ interface ConversationState {
   loadConversationsFromAPI: () => Promise<void>;
 }
 
+const toValidDate = (value: Date | string | number | null | undefined): Date => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+  if (value != null) {
+    const date = new Date(value);
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+  return new Date();
+};
+
+const toISOStringSafe = (value: Date | string | number | null | undefined): string =>
+  toValidDate(value).toISOString();
+
+const toConversationId = (id: string | number | null | undefined): string =>
+  id == null ? "" : String(id);
+
+const isTempConversationId = (id: string | number | null | undefined): boolean =>
+  toConversationId(id).startsWith("temp_");
+
 // Helper function to generate a title from first message
 export const generateConversationTitle = (firstMessage: string): string => {
   if (!firstMessage) return "گفتگوی جدید";
@@ -56,11 +74,12 @@ export const useConversationStore = create<ConversationState>()(
           const apiResponse = await createConversationInAPI(title);
           
           if (apiResponse.id) {
+            const newId = toConversationId(apiResponse.id);
             const newConversation: Conversation = {
-              id: apiResponse.id,
+              id: newId,
               title: apiResponse.title || title,
-              createdAt: new Date(apiResponse.created_at),
-              updatedAt: new Date(apiResponse.updated_at),
+              createdAt: toValidDate(apiResponse.created_at),
+              updatedAt: toValidDate(apiResponse.updated_at),
               messageCount: apiResponse.message_count || 0,
               messages: [],
               isSynced: true,
@@ -68,10 +87,10 @@ export const useConversationStore = create<ConversationState>()(
 
             set((state) => ({
               conversations: [newConversation, ...state.conversations],
-              activeConversationId: apiResponse.id,
+              activeConversationId: newId,
             }));
 
-            return apiResponse.id;
+            return newId;
           }
 
           console.warn("Failed to create conversation in API");
@@ -106,13 +125,15 @@ export const useConversationStore = create<ConversationState>()(
         const state = get();
         const conversation = state.conversations.find((c) => c.id === conversationId);
         if (!conversation) return null;
-        if (conversation.isSynced) return conversation.id;
+        if (conversation.isSynced && !isTempConversationId(conversationId)) {
+          return toConversationId(conversation.id);
+        }
 
         try {
           const apiResponse = await createConversationInAPI(title || conversation.title || "گفتگوی جدید");
-          if (!apiResponse.id) return conversationId;
+          if (!apiResponse.id) return null;
 
-          const newId = apiResponse.id;
+          const newId = toConversationId(apiResponse.id);
           set((state) => ({
             conversations: state.conversations.map((conv) =>
               conv.id === conversationId
@@ -120,8 +141,8 @@ export const useConversationStore = create<ConversationState>()(
                     ...conv,
                     id: newId,
                     title: apiResponse.title || title || conv.title,
-                    createdAt: new Date(apiResponse.created_at),
-                    updatedAt: new Date(apiResponse.updated_at),
+                    createdAt: toValidDate(apiResponse.created_at),
+                    updatedAt: toValidDate(apiResponse.updated_at),
                     isSynced: true,
                   }
                 : conv
@@ -132,7 +153,7 @@ export const useConversationStore = create<ConversationState>()(
           return newId;
         } catch (error) {
           console.error("Failed to sync conversation:", error);
-          return conversationId;
+          return null;
         }
       },
 
@@ -227,26 +248,45 @@ export const useConversationStore = create<ConversationState>()(
 
       loadConversationsFromAPI: async () => {
         try {
-          const apiConversations = await fetchConversationsFromAPI();
+          const apiConversations = (await fetchConversationsFromAPI()).map((c) => ({
+            ...c,
+            id: toConversationId(c.id),
+          }));
           set((state) => {
-            // جایگزین کردن گفتگوهای موجود با گفتگوهای API
-            // گفتگوهای API اولویت دارند
+            const apiIds = new Set(apiConversations.map((c) => c.id));
+            const localUnsynced = state.conversations.filter(
+              (c) => isTempConversationId(c.id) || !c.isSynced
+            );
+
             if (apiConversations.length > 0) {
-              // اگر گفتگوی فعالی نداریم یا گفتگوی فعال در API نیست، اولین گفتگو را فعال کنیم
-              const currentActiveExists = apiConversations.some(
-                c => c.id === state.activeConversationId
+              const merged = [
+                ...apiConversations.map((c) => ({ ...c, isSynced: true as const })),
+                ...localUnsynced.filter((c) => !apiIds.has(c.id)),
+              ];
+              const currentActiveExists = merged.some(
+                (c) => c.id === state.activeConversationId
               );
-              const newActiveId = !state.activeConversationId || !currentActiveExists
-                ? apiConversations[0].id
-                : state.activeConversationId;
+              const newActiveId =
+                !state.activeConversationId || !currentActiveExists
+                  ? merged[0]?.id ?? null
+                  : state.activeConversationId;
 
               return {
-                conversations: apiConversations.map((c) => ({ ...c, isSynced: true })),
+                conversations: merged,
                 activeConversationId: newActiveId,
               };
             }
-            // اگر گفتگویی از API نیامد، state را تغییر نده
-            return state;
+
+            // API empty: drop stale synced conversations from localStorage
+            const activeStillValid = localUnsynced.some(
+              (c) => c.id === state.activeConversationId
+            );
+            return {
+              conversations: localUnsynced,
+              activeConversationId: activeStillValid
+                ? state.activeConversationId
+                : localUnsynced[0]?.id ?? null,
+            };
           });
         } catch (error) {
           console.error("Failed to load conversations from API:", error);
@@ -278,14 +318,21 @@ export const useConversationStore = create<ConversationState>()(
                 isSynced?: boolean;
               }) => ({
                 ...conv,
-                createdAt: new Date(conv.createdAt),
-                updatedAt: new Date(conv.updatedAt),
+                id: toConversationId(conv.id),
+                createdAt: toValidDate(conv.createdAt),
+                updatedAt: toValidDate(conv.updatedAt),
                 messages: (conv.messages || []).map((msg) => ({
                   ...msg,
-                  timestamp: new Date(msg.timestamp),
+                  id: toConversationId(msg.id),
+                  timestamp: toValidDate(msg.timestamp),
                 })),
                 isSynced: conv.isSynced,
               }));
+            }
+            if (parsed?.state?.activeConversationId != null) {
+              parsed.state.activeConversationId = toConversationId(
+                parsed.state.activeConversationId
+              );
             }
             return parsed;
           } catch {
@@ -300,11 +347,11 @@ export const useConversationStore = create<ConversationState>()(
                 ...value.state,
                 conversations: value.state.conversations.map((conv: Conversation) => ({
                   ...conv,
-                  createdAt: conv.createdAt?.toISOString(),
-                  updatedAt: conv.updatedAt?.toISOString(),
+                  createdAt: toISOStringSafe(conv.createdAt),
+                  updatedAt: toISOStringSafe(conv.updatedAt),
                   messages: conv.messages?.map((msg: ChatMessage) => ({
                     ...msg,
-                    timestamp: msg.timestamp.toISOString(),
+                    timestamp: toISOStringSafe(msg.timestamp),
                   })),
                 })),
               },

@@ -16,6 +16,9 @@ import {
 } from "@/app/_store/conversation-store";
 import { useSessionStore } from "@/app/_store/auth-store";
 import { TopNavigationAccount } from "@/app/components/top-navigation-account";
+import { PlanBadge, PlanBadgeAuto } from "@/app/components/PlanBadge";
+import { UserPlan } from "@/app/_types/plan.types";
+import { getUserPlanAction } from "@/app/_actions/plan-actions";
 
 const ensureDate = (value: Date | string | number | null | undefined) => {
   if (!value) return null;
@@ -54,6 +57,9 @@ const Dashboard = () => {
 
   // Session store
   const { status: authStatus } = useSessionStore();
+  
+  // Plan state
+  const [userPlan, setUserPlan] = useState<UserPlan | null>(null);
 
   // Conversation store
   const {
@@ -62,6 +68,7 @@ const Dashboard = () => {
     createLocalConversation,
     ensureConversationSynced,
     setActiveConversation,
+    updateConversation,
     deleteConversation,
     addMessageToConversation,
     getConversationMessages,
@@ -80,8 +87,16 @@ const Dashboard = () => {
 
   // Load conversations from API on mount if authenticated
   useEffect(() => {
-    if (authStatus === 'authenticated' && conversations.length === 0) {
+    if (authStatus === 'authenticated') {
       loadConversationsFromAPI();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authStatus]);
+
+  // Load user plan on mount if authenticated
+  useEffect(() => {
+    if (authStatus === 'authenticated') {
+      getUserPlanAction().then(setUserPlan).catch(console.error);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authStatus]);
@@ -141,6 +156,18 @@ const Dashboard = () => {
 
     try { 
       const response = await askUserQuestion(content, currentConversationId);
+      // Backend may recreate a stale conversation id — keep local store in sync
+      if (response.conversation_id != null) {
+        const backendId = String(response.conversation_id);
+        if (backendId && backendId !== currentConversationId) {
+          updateConversation(currentConversationId, {
+            id: backendId,
+            isSynced: true,
+          });
+          setActiveConversation(backendId);
+          currentConversationId = backendId;
+        }
+      }
       const answer: ChatMessage = {
         id: generateMessageId(),
         type: "answer",
@@ -148,12 +175,22 @@ const Dashboard = () => {
         timestamp: new Date(),
       };
       addMessageToConversation(currentConversationId, answer);
+      
+      // Refresh plan info after successful question
+      if (authStatus === 'authenticated') {
+        getUserPlanAction().then(setUserPlan).catch(console.error);
+      }
     } catch (error) {
       console.error("Error asking question:", error);
+      const errorMessage = error instanceof Error ? error.message : "دریافت پاسخ از سرور ناموفق بود";
       toast({
         title: "خطا",
-        description: "دریافت پاسخ از سرور ناموفق بود",
+        description: errorMessage,
+        variant: "destructive",
       });
+      
+      // Remove the question message if it failed
+      // (optional - you might want to keep it)
     }
     finally {
       setQuestion("");
@@ -213,7 +250,12 @@ const Dashboard = () => {
       <div className="container mx-auto px-4 py-8">
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Conversations Sidebar */}
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 space-y-6">
+            {/* Plan Info Card */}
+            {authStatus === 'authenticated' && userPlan && (
+              <PlanBadge plan={userPlan} showDetails={true} />
+            )}
+            
             <Card className="shadow-elegant">
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -288,13 +330,20 @@ const Dashboard = () => {
           <div className="lg:col-span-2 space-y-6">
             <Card className="shadow-elegant">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Scale className="w-5 h-5 text-primary" />
-                  سوال حقوقی خود را بپرسید
-                </CardTitle>
-                <CardDescription>
-                  سوالات خود را مطرح کنید و پاسخ تخصصی دریافت کنید
-                </CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Scale className="w-5 h-5 text-primary" />
+                      سوال حقوقی خود را بپرسید
+                    </CardTitle>
+                    <CardDescription>
+                      سوالات خود را مطرح کنید و پاسخ تخصصی دریافت کنید
+                    </CardDescription>
+                  </div>
+                  {authStatus === 'authenticated' && userPlan && (
+                    <PlanBadge plan={userPlan} />
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Messages */}

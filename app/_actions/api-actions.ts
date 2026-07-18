@@ -4,6 +4,7 @@ import { getSession } from "@/app/utils/session";
 import { createDataWithAuth, readDataWithAuth } from "@/app/core/http-service/http-service";
 import { AskQuestionResponse, ConversationResponse } from "@/types/api.interfaces";
 import { Conversation } from "@/app/_store/conversation-store";
+import { checkCanAskQuestionAction, incrementQuestionCountAction } from "@/app/_actions/plan-actions";
 
 // Helper function for structured logging
 const log = (level: 'info' | 'error' | 'warn', message: string, data?: unknown) => {
@@ -29,6 +30,17 @@ export async function askUserQuestionAction(
             throw new Error('Unauthorized - Please login first');
         }
         
+        // بررسی پلن کاربر و محدودیت سوالات
+        const planCheck = await checkCanAskQuestionAction();
+        if (!planCheck.canAsk) {
+            log('warn', 'askUserQuestionAction blocked - plan limit reached', {
+                plan: planCheck.plan?.type,
+                questionsUsed: planCheck.plan?.questionsUsed,
+                questionLimit: planCheck.plan?.questionLimit,
+            });
+            throw new Error(planCheck.reason || 'شما به محدودیت سوالات خود رسیده‌اید');
+        }
+        
         const requestBody: {
             question: string;
             conversation_id?: string;
@@ -46,6 +58,7 @@ export async function askUserQuestionAction(
 
         log('info', 'Calling /rag/ask API', {
             hasConversationId: !!conversationId,
+            plan: planCheck.plan?.type,
         });
 
         const requestStartTime = Date.now();
@@ -55,9 +68,14 @@ export async function askUserQuestionAction(
         );
         const requestDuration = Date.now() - requestStartTime;
 
+        // بعد از موفقیت‌آمیز بودن سوال، تعداد سوالات استفاده شده را افزایش بده
+        // توجه: این باید در backend هم انجام شود
+        await incrementQuestionCountAction();
+
         log('info', 'askUserQuestionAction completed successfully', {
             duration: `${requestDuration}ms`,
             hasAnswer: !!response?.answer,
+            plan: planCheck.plan?.type,
         });
 
         const totalDuration = Date.now() - startTime;
@@ -68,16 +86,32 @@ export async function askUserQuestionAction(
         return response;
     } catch (err: unknown) {
         const totalDuration = Date.now() - startTime;
-        const error = err as { message?: string; response?: { data?: unknown; status?: number } };
+        const error = err as {
+            message?: string;
+            response?: { data?: unknown; status?: number };
+        };
+        const detail =
+            error?.response?.data &&
+            typeof error.response.data === "object" &&
+            error.response.data !== null &&
+            "detail" in error.response.data
+                ? String((error.response.data as { detail: unknown }).detail)
+                : undefined;
+        const message =
+            detail ||
+            error?.message ||
+            "دریافت پاسخ از سرور ناموفق بود";
+
         log('error', 'askUserQuestionAction failed', {
             totalDuration: `${totalDuration}ms`,
             error: {
-                message: error?.message,
+                message,
                 status: error?.response?.status,
                 data: error?.response?.data,
             },
         });
-        throw err;
+        // Throw a plain Error so Next server actions don't surface opaque digests
+        throw new Error(message);
     }
 }
 
@@ -113,7 +147,11 @@ export async function createConversationInAPIAction(
             totalDuration: `${totalDuration}ms`,
         });
 
-        return response;
+        // Backend returns numeric ids; store/UI expect strings (temp_*, startsWith, etc.)
+        return {
+            ...response,
+            id: String(response.id),
+        };
     } catch (err: unknown) {
         const totalDuration = Date.now() - startTime;
         const error = err as { message?: string; response?: { data?: unknown; status?: number } };
@@ -154,14 +192,20 @@ export async function fetchConversationsFromAPIAction(): Promise<Conversation[]>
         });
 
         // تبدیل response API به format داخلی
-        const conversations: Conversation[] = data.map((conv) => ({
-            id: conv.id,
-            title: conv.title || "گفتگوی جدید",
-            createdAt: new Date(conv.created_at),
-            updatedAt: new Date(conv.updated_at),
-            messageCount: conv.message_count || 0,
-            messages: [], // پیام‌ها باید جداگانه دریافت شوند
-        }));
+        const conversations: Conversation[] = data.map((conv) => {
+            const createdAt = new Date(conv.created_at);
+            const updatedAt = new Date(conv.updated_at || conv.created_at);
+            return {
+                // Backend ConversationSummary.id is int
+                id: String(conv.id),
+                title: conv.title || "گفتگوی جدید",
+                createdAt: Number.isNaN(createdAt.getTime()) ? new Date() : createdAt,
+                updatedAt: Number.isNaN(updatedAt.getTime()) ? new Date() : updatedAt,
+                messageCount: conv.message_count || 0,
+                messages: [], // پیام‌ها باید جداگانه دریافت شوند
+                isSynced: true,
+            };
+        });
 
         const totalDuration = Date.now() - startTime;
         log('info', 'fetchConversationsFromAPIAction total duration', {

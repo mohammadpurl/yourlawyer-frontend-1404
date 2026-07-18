@@ -15,6 +15,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "./ui/dropdown-menu"
+import { PlanBadgeAuto } from "./PlanBadge"
 
 export const TopNavigationAccount = () => {
     const status = useSessionStore(state => state.status)
@@ -56,27 +57,29 @@ export const TopNavigationAccount = () => {
           </div>
           )}
           {status === 'authenticated' && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  className="h-11 w-11 rounded-full border border-border overflow-hidden shadow-sm hover:shadow-md transition"
-                  aria-label="Account menu"
-                >
-                  {session?.pic ? (
-                    <Image
-                      src={session.pic}
-                      className="h-full w-full object-cover"
-                      alt="profile picture"
-                      width={44}
-                      height={44}
-                    />
-                  ) : (
-                    <div className="h-full w-full bg-muted flex items-center justify-center text-sm font-semibold text-muted-foreground">
-                      {(session?.userName || "؟").slice(0, 2)}
-                    </div>
-                  )}
-                </button>
-              </DropdownMenuTrigger>
+            <div className="flex items-center gap-3">
+              <PlanBadgeAuto />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="h-11 w-11 rounded-full border border-border overflow-hidden shadow-sm hover:shadow-md transition"
+                    aria-label="Account menu"
+                  >
+                    {session?.pic ? (
+                      <Image
+                        src={session.pic}
+                        className="h-full w-full object-cover"
+                        alt="profile picture"
+                        width={44}
+                        height={44}
+                      />
+                    ) : (
+                      <div className="h-full w-full bg-muted flex items-center justify-center text-sm font-semibold text-muted-foreground">
+                        {(session?.userName || "؟").slice(0, 2)}
+                      </div>
+                    )}
+                  </button>
+                </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
                 <DropdownMenuLabel className="space-y-1">
                   <div className="flex items-center gap-2 text-sm font-semibold">
@@ -106,6 +109,7 @@ export const TopNavigationAccount = () => {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            </div>
           )}
         </div>
       </header>

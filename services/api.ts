@@ -16,23 +16,7 @@ export async function askUserQuestion(
   message: string,
   conversationId?: string
 ): Promise<AskQuestionResponse> {
-  try {
-    const response = await askUserQuestionAction(message, conversationId);
-    return response;
-  } catch (error) {
-    console.error("Error asking question:", error);
-    notifyError(error instanceof Error ? error.message : "خطایی رخ داد", "خطا");
-    return {
-      answer: "خطایی رخ داد",
-      sources: [],
-      response_time_seconds: 0,
-      citation_count: 0,
-      citation_accuracy: 0,
-      domain: "",
-      domain_label: "",
-      domain_confidence: 0,
-    };
-  }
+  return askUserQuestionAction(message, conversationId);
 }
 
 

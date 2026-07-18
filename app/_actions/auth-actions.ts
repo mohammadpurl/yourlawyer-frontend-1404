@@ -5,6 +5,8 @@ import { jwtDecode } from "jwt-decode";
 import { decryptSession, encryptSession } from "@/app/utils/session";
 import { createData } from "@/app/core/http-service/http-service";
 
+// Note: access tokens stay in httpOnly cookie only — never returned to the client.
+
 // Helper function for structured logging
 const log = (level: 'info' | 'error' | 'warn', message: string, data?: unknown) => {
     const timestamp = new Date().toISOString();
@@ -133,7 +135,7 @@ export async function verifyCodeAction(model: VerifyCodeModel) {
             totalDuration: `${totalDuration}ms`,
         });
         
-        return { success: true, data: user };
+        return { success: true };
     } catch (err: unknown) {
         const totalDuration = Date.now() - startTime;
         const axiosError = err as { message?: string; code?: string; response?: { data?: unknown; status?: number }; stack?: string };
@@ -198,27 +200,13 @@ export async function resendOtpAction(model: MobileRequestModel) {
     }
 }
 
-export async function signinAction(model: SignInModel) {
-    const headersList = headers();
-    const userAgent = (await headersList).get('user-agent');
-    try {
-        const response = await fetch(`https://general-api.classbon.com/api/identity/signin`, {
-            method: 'POST',
-            body: JSON.stringify({ ...model, userAgent }),
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        if (response.ok) {
-            const user = await response.json();
-            await SetAuthCookieAction(user);
-            return { success: true }
-        }
-        return { success: false, error: 'خطا در ورود' };
-    } catch (err) {
-        console.log(err);
-        return { success: false, error: 'خطا در ورود' }
-    }
+export async function signinAction(_model: SignInModel) {
+    // Deprecated third-party identity endpoint removed for security.
+    // Use OTP flow: sendVerificationCodeAction + verifyCodeAction against yourlawyer backend.
+    return {
+        success: false,
+        error: "ورود با این روش غیرفعال است. از ورود با کد تأیید استفاده کنید.",
+    };
 }
 
 export async function signOutAction() {
@@ -298,9 +286,13 @@ export async function SetAuthCookieAction(user: UserResponse) {
         log('info', 'Setting cookie...');
         cookieStore.set('ylawyer-session', encryptedSession, {
             httpOnly: true,
-            secure: false,
+            secure: process.env.NODE_ENV === 'production',
             sameSite: 'strict',
-            path: '/'
+            path: '/',
+            maxAge: Math.max(
+                60,
+                Math.floor((session.sessionExpiry - Date.now()) / 1000)
+            ),
         });
         
         const totalDuration = Date.now() - startTime;

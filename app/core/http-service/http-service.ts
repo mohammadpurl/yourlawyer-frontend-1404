@@ -147,13 +147,16 @@ async function apiBase<T>(
         const duration = Date.now() - startTime;
 
         if (response.status >= 400) {
-            const errorBody = response.data as ApiError | undefined;
+            const errorBody = response.data as ApiError | Record<string, unknown> | undefined;
             const message =
-                errorBody?.message ||
-                (typeof errorBody === 'object' && errorBody !== null && 'detail' in errorBody
-                    ? String((errorBody as { detail: unknown }).detail)
-                    : undefined) ||
-                `Request failed with status ${response.status}`;
+                (typeof errorBody === 'object' && errorBody !== null
+                    ? String(
+                          ('detail' in errorBody && errorBody.detail) ||
+                              ('title' in errorBody && errorBody.title) ||
+                              ('message' in errorBody && errorBody.message) ||
+                              ''
+                      )
+                    : '') || `Request failed with status ${response.status}`;
 
             log('error', `[API_BASE] Request failed with status ${response.status}`, {
                 url,

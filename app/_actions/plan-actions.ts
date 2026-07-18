@@ -1,7 +1,13 @@
 'use server';
 
 import { getSession } from "@/app/utils/session";
-import { UserPlan, createDefaultPlan, canAskQuestion, getPlanConfig } from "@/app/_types/plan.types";
+import {
+    UserPlan,
+    createDefaultPlan,
+    canAskQuestion,
+    getPlanConfig,
+    getResetDate,
+} from "@/app/_types/plan.types";
 
 /**
  * دریافت پلن کاربر از session
@@ -10,38 +16,25 @@ export async function getUserPlanAction(): Promise<UserPlan> {
     try {
         const session = await getSession();
         if (!session) {
-            // اگر کاربر لاگین نباشد، پلن پیش‌فرض برگردان
             return createDefaultPlan();
         }
-        
-        // اگر پلن در session وجود دارد، برگردان
+
         if (session.plan) {
-            // تبدیل resetDate به Date object برای بررسی
-            const resetDate = session.plan.resetDate instanceof Date 
-                ? session.plan.resetDate 
-                : new Date(session.plan.resetDate);
-            
-            // بررسی اینکه آیا تاریخ ریست گذشته است یا نه
-            const now = new Date();
-            
-            if (now > resetDate) {
-                // تاریخ ریست گذشته، پلن را ریست کن
+            const resetDate = getResetDate(session.plan);
+
+            if (new Date() > resetDate) {
                 const newPlan = createDefaultPlan();
-                newPlan.type = session.plan.type; // نوع پلن را حفظ کن
+                newPlan.type = session.plan.type;
                 newPlan.questionLimit = getPlanConfig(session.plan.type).questionLimit;
                 return newPlan;
             }
-            
-            // برگرداندن پلن با resetDate به صورت string (برای سازگاری با JWT)
+
             return {
                 ...session.plan,
-                resetDate: typeof session.plan.resetDate === 'string' 
-                    ? session.plan.resetDate 
-                    : session.plan.resetDate.toISOString(),
+                resetDate: session.plan.resetDate,
             };
         }
-        
-        // اگر پلن وجود ندارد، پلن پیش‌فرض ایجاد کن
+
         return createDefaultPlan();
     } catch (error) {
         console.error('[PLAN-ACTION] Error getting user plan:', error);

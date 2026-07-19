@@ -38,7 +38,12 @@ export const networkErrorStrategy = () => {
 
 export const errorHandler: Record<number, ApiErrorHandler> = {
     400: (errorData) => (errorData.errors ? validationErrorStrategy : badRequestErrorStrategy)(errorData),
+    401: unauthorizedErrorStrategy,
     403: unauthorizedErrorStrategy,
     404: notFoundErrorStrategy,
-    500: unhandledExceptionStrategy
-}
+    422: validationErrorStrategy,
+    500: unhandledExceptionStrategy,
+    502: unhandledExceptionStrategy,
+    503: unhandledExceptionStrategy,
+    504: unhandledExceptionStrategy,
+};

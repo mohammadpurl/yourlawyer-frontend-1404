@@ -284,10 +284,15 @@ export async function SetAuthCookieAction(user: UserResponse) {
         });
         
         log('info', 'Setting cookie...');
+        // Only set Secure when HTTPS is actually used. On plain HTTP (current nginx:80),
+        // browsers silently drop Secure cookies → next request has no session.
+        const cookieSecure =
+            process.env.COOKIE_SECURE === "true" ||
+            process.env.NEXT_PUBLIC_COOKIE_SECURE === "true";
         cookieStore.set('ylawyer-session', encryptedSession, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'strict',
+            secure: cookieSecure,
+            sameSite: 'lax',
             path: '/',
             maxAge: Math.max(
                 60,

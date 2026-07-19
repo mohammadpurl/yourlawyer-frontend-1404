@@ -93,7 +93,16 @@ httpService.interceptors.response.use(
             });
             if (statusCode >= 400) {
                 const errorData: ApiError = error.response?.data;
-                errorHandler[statusCode](errorData);
+                const handler = errorHandler[statusCode] ?? errorHandler[500];
+                if (handler) {
+                    handler(errorData);
+                } else {
+                    throw {
+                        title: "Unhandled error",
+                        status: statusCode,
+                        detail: `Request failed with status ${statusCode}`,
+                    };
+                }
             }
         } else if (error?.request) {
             // Check if it's a timeout

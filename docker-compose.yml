@@ -14,9 +14,11 @@ services:
       - "3000:8000"  # Host:Container - Dockerfile exposes 8000
     environment:
       - NODE_ENV=production
+      # Browser-facing API (public). Server-side must use internal Docker service name.
       - NEXT_PUBLIC_API_URL=${NEW_NEXT_PUBLIC_API_URL:-${NEXT_PUBLIC_API_URL:-http://localhost:8000}}
-      - API_URL=${API_URL:-${NEW_NEXT_PUBLIC_API_URL:-${NEXT_PUBLIC_API_URL:-http://localhost:8000}}}
+      - API_URL=${API_URL:-http://your-lowyer-backend:5000}
       - JWT_SERVER_SECRET=${JWT_SERVER_SECRET}
+      - COOKIE_SECURE=${COOKIE_SECURE:-false}
     env_file:
       - .env.production
     networks:
